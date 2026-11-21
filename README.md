@@ -25,6 +25,32 @@ Backups store the STR data for slots 1–6 and leave slots 7–12 outside the op
 
 Use the station's direct HTTP or HTTPS stream URL. The CLI validates syntax and the pinned STR release rejects URLs it identifies as web pages. Set `--codec AAC` or `--codec AAC+` where the station uses that codec. STR can proxy MP3 and AAC and can convert HLS with MPEG-TS segments carrying supported audio. The live test here used HTTPS MP3. Compatibility for other streams depends on the station and should be confirmed by playback. Use public station sources to keep playback independent of other local devices. [STR control API](https://github.com/JRpersonal/streborn/blob/v1.8.2/docs/CONTROL-API.md) · [STR stream proxy design](https://github.com/JRpersonal/streborn/blob/v1.8.2/docs/ARCHITECTURE.md)
 
+## Six-station example
+
+This setup assigns Trito Programma, Deftero Programma, ERA Kosmos, WRBF 104.9 The Rebel, Trito Maestro, and Rebetiko Sealabs to buttons 1–6 respectively.
+
+Replace `192.168.1.50` with your speaker's IP. When switching from the [original six-station layout](docs/verification.md), run the commands one at a time in the order shown. This frees each moved station's old button before saving it to the new one. Confirm each prompt and wait for `Verified slot` before continuing.
+
+```bash
+python3 soundtouch_radio.py presets set --host 192.168.1.50 \
+    --slot 6 --name "Rebetiko Sealabs" --codec MP3 --url "https://rebetiko.sealabs.net/radio"
+
+python3 soundtouch_radio.py presets set --host 192.168.1.50 \
+    --slot 3 --name "ERA Kosmos" --codec MP3 --url "https://radiostreaming.ert.gr/ert-kosmos"
+
+python3 soundtouch_radio.py presets set --host 192.168.1.50 \
+    --slot 4 --name "Rebel" --codec AAC --url "https://ais-sa1.streamon.fm/7047_48k.aac"
+
+python3 soundtouch_radio.py presets set --host 192.168.1.50 \
+    --slot 1 --name "Trito Programma" --codec MP3 --url "https://radiostreaming.ert.gr/ert-trito"
+
+python3 soundtouch_radio.py presets set --host 192.168.1.50 \
+    --slot 2 --name "Deftero Programma" --codec MP3 --url "https://radiostreaming.ert.gr/ert-deftero"
+
+python3 soundtouch_radio.py presets set --host 192.168.1.50 \
+    --slot 5 --name "Trito Maestro" --codec MP3 --url "https://radiostreaming.ert.gr/ert-trito-maestro"
+```
+
 ## Run the diagnostic
 
 Run these commands from this directory on a Linux computer connected to the speaker's home network. Use Python 3.10 or newer. Direct probing uses only the Python standard library.
@@ -50,7 +76,7 @@ A direct probe exits with status 0 when Bose `/info` identifies the device, and 
 
 | Operation | Verified source |
 | --- | --- |
-| HTTP GET `:8090/info` and `:8090/presets` | [Bose SoundTouch Web API, sections 6.13 and 6.14](https://assets.bosecreative.com/m/496577402d128874/original/SoundTouch-Web-API.pdf#page=12) |
+| HTTP GET `:8090/info` and `:8090/presets` | [Bose SoundTouch Web API v1.1, sections 12.13 and 12.14](https://assets.bosecreative.com/m/496577402d128874/original/SoundTouch-Web-API.pdf#page=21) |
 | HTTP GET `:8888/api/agent/version`, falling back to `:17008/api/agent/version` if needed | [STR local control API](https://github.com/JRpersonal/streborn/blob/v1.8.2/docs/CONTROL-API.md) |
 | mDNS browse for `_soundtouch._tcp`, `_bose-soundtouch._tcp`, `_streborn._tcp`, and `_soundtouchstick._tcp` in `.local` | [STR discovery source](https://github.com/JRpersonal/streborn/blob/v1.8.2/discovery/discovery.go) |
 
@@ -65,3 +91,10 @@ python3 -B -m unittest discover -s tests -v
 The tests use mocked HTTP and mDNS responses. The [compatibility assessment](docs/compatibility.md) records the live diagnostic, upstream findings, and recovery options.
 
 The device-specific procedures are in [installation](docs/installation.md), [recovery](docs/recovery.md), and the [independent playback checklist](docs/verification.md).
+
+## References and credits
+
+- Thanks to **JRpersonal and the SoundTouch Reborn contributors** for building and documenting the speaker-side agent that makes standalone presets possible. This Linux client was verified against STR v1.8.2. [SoundTouch Reborn](https://github.com/JRpersonal/streborn) · [v1.8.2 release](https://github.com/JRpersonal/streborn/releases/tag/v1.8.2) · [Control API](https://github.com/JRpersonal/streborn/blob/v1.8.2/docs/CONTROL-API.md)
+- Thanks to **Bose** for publishing the device's local API and the model-specific firmware documentation used for diagnostics and recovery planning. [SoundTouch Web API](https://assets.bosecreative.com/m/496577402d128874/original/SoundTouch-Web-API.pdf) · [SoundTouch 20 Series III firmware guide](https://support.bose.ca/en-CA/article/soundtouch-20-iii-updating-the-software-or-firmware-of-your-product)
+- Thanks to the **Avahi contributors** for the Linux mDNS/DNS-SD discovery tool. [Avahi](https://avahi.org/)
+- Thanks to **ERT**, **WRBF 104.9 and its streaming provider Futuri**, and the **Rebetiko Sealabs archive** for making their stations available online. [ERT Echo radio stations](https://www.ertecho.gr/radios/) · [WRBF’s The Rebel player](https://listen.streamon.fm/wrbf) · [Rebetiko Sealabs radio](https://rebetiko.sealabs.net/radiofono)
