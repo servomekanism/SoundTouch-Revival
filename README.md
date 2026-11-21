@@ -1,11 +1,21 @@
 # SoundTouch Radio
 
-Configure the six physical internet radio presets on a Bose SoundTouch 20 from Linux. The speaker runs STR and stores the presets on its own flash. The Linux CLI connects only while you use it. [STR architecture](https://github.com/JRpersonal/streborn/blob/v1.8.2/docs/ARCHITECTURE.md)
+Configure the six physical internet radio presets on a Bose SoundTouch 20. The speaker runs STR and stores the presets on its own flash. The app connects only while you configure the buttons. [STR architecture](https://github.com/JRpersonal/streborn/blob/v1.8.2/docs/ARCHITECTURE.md)
 
 ## Implementations
 
-- [Python CLI](python/) is the working implementation and the fallback for Linux. The `python-v0.1.0` tag records the original root-level layout.
-- [Rust workspace](rust/) reserves crates for the shared speaker client, CLI, and Iced desktop app. Its target platforms are Windows x64, Linux x64, and Apple Silicon macOS. The workspace currently contains scaffolding.
+- The Rust workspace builds a CLI and an Iced desktop editor for Windows x64, Linux x64, and Apple Silicon macOS. Both read and write the same backup format as Python. [Rust build and usage guide](rust/README.md)
+- The [Python CLI](python/) is available for Linux. The `python-v0.1.0` tag records the original root-level layout.
+
+## Desktop app
+
+Run from the repository root with Rust installed.
+
+```bash
+cargo run --manifest-path rust/Cargo.toml -p soundtouch-radio-desktop --locked
+```
+
+Enter your speaker IP and click **Connect & load presets**. Open any of the six rows to edit it, then review and confirm with **Apply changes**. Use **Backup & restore** to save a copy or load a previous setup. [Desktop instructions](rust/README.md#edit-the-buttons)
 
 ## Manage presets
 
@@ -91,6 +101,7 @@ The probe uses direct HTTP sockets with a four-second socket timeout and caps ea
 
 ```bash
 (cd python && python3 -B -m unittest discover -s tests -v)
+cargo test --manifest-path rust/Cargo.toml --workspace --locked
 ```
 
 The tests use mocked HTTP and mDNS responses. The [compatibility assessment](docs/compatibility.md) records the live diagnostic, upstream findings, and recovery options.
@@ -99,5 +110,5 @@ The device-specific procedures are in [installation](docs/installation.md), [rec
 
 ## References and credits
 
-- Thanks to **JRpersonal and the SoundTouch Reborn contributors** for building and documenting the speaker-side agent that makes standalone presets possible. This Linux client was verified against STR v1.8.2. [SoundTouch Reborn](https://github.com/JRpersonal/streborn) · [v1.8.2 release](https://github.com/JRpersonal/streborn/releases/tag/v1.8.2) · [Control API](https://github.com/JRpersonal/streborn/blob/v1.8.2/docs/CONTROL-API.md)
+- Thanks to **JRpersonal and the SoundTouch Reborn contributors** for building and documenting the speaker-side agent that makes standalone presets possible. The client targets STR v1.8.2. [SoundTouch Reborn](https://github.com/JRpersonal/streborn) · [v1.8.2 release](https://github.com/JRpersonal/streborn/releases/tag/v1.8.2) · [Control API](https://github.com/JRpersonal/streborn/blob/v1.8.2/docs/CONTROL-API.md)
 - Thanks to the **Rebetiko Sealabs archive** for making its recordings available through its online radio station. [Rebetiko Sealabs radio](https://rebetiko.sealabs.net/radiofono)
