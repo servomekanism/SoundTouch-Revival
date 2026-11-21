@@ -9,7 +9,7 @@ Configure the six physical internet radio presets on a Bose SoundTouch 20. The s
 
 ## Desktop app
 
-Run the optimized desktop build from the repository root with Rust installed.
+You’ll need Rust on your computer and SoundTouch Reborn installed on the speaker. Run the optimized desktop build from the repository root. [SoundTouch Reborn setup](https://github.com/JRpersonal/streborn)
 
 ```bash
 cargo run --manifest-path rust/Cargo.toml -p soundtouch-radio-desktop --release --locked
@@ -44,7 +44,7 @@ Use the station's direct HTTP or HTTPS stream URL. The CLI validates syntax and 
 
 This setup assigns Trito Programma, Deftero Programma, ERA Kosmos, WRBF 104.9 The Rebel, Trito Maestro, and Rebetiko Sealabs to buttons 1–6 respectively.
 
-Replace `192.168.1.50` with your speaker's IP. When switching from the [original six-station layout](docs/verification.md), run the commands one at a time in the order shown. This frees each moved station's old button before saving it to the new one. Confirm each prompt and wait for `Verified slot` before continuing.
+Replace `192.168.1.50` with your speaker's IP. Run the commands one at a time in the order shown. Confirm each prompt and wait for `Verified slot` before continuing. If STR reports that a station is already assigned, free its old button before assigning it to a new one.
 
 ```bash
 python3 python/soundtouch_radio.py presets set --host 192.168.1.50 \
@@ -104,9 +104,7 @@ The probe uses direct HTTP sockets with a four-second socket timeout and caps ea
 cargo test --manifest-path rust/Cargo.toml --workspace --locked
 ```
 
-The tests use mocked HTTP and mDNS responses. The [compatibility assessment](docs/compatibility.md) records the live diagnostic, upstream findings, and recovery options.
-
-The device-specific procedures are in [installation](docs/installation.md), [recovery](docs/recovery.md), and the [independent playback checklist](docs/verification.md).
+The tests use mocked HTTP and mDNS responses.
 
 ## References and credits
 

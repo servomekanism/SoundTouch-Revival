@@ -50,4 +50,4 @@ Discovery uses mDNS. Enter the address directly if multicast is blocked by a VM,
 cargo test --manifest-path rust/Cargo.toml --workspace --locked
 ```
 
-Tests use simulated Bose and STR responses. The GitHub Actions workflow defines native build and test jobs for the three target platforms. The [independent playback checklist](../docs/verification.md) covers the speaker-side test with the configuration computer and phone off.
+Tests use simulated Bose and STR responses. The GitHub Actions workflow defines native build and test jobs for the three target platforms.
