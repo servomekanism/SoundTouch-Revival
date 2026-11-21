@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "soundtouch-radio"
+version = "0.1.0"
+description = "Local Linux client for SoundTouch Reborn radio presets"
+requires-python = ">=3.10"
+
+[project.scripts]
+soundtouch-radio = "soundtouch_radio:main"
+
+[tool.setuptools]
+py-modules = ["soundtouch_radio", "soundtouch_probe"]
