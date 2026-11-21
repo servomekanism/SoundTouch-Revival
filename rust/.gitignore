@@ -1,0 +1,5 @@
+/target/
+/backups/
+/presets.json
+/presets.before-restore-*.json
+/soundtouch-diagnostic.json
