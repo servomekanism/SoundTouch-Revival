@@ -1,5 +1,9 @@
 use std::io::{self, Read};
-use std::time::Duration;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
@@ -7,6 +11,38 @@ use crate::{Error, Host, Result};
 
 pub(crate) const BOSE_PORT: u16 = 8090;
 pub(crate) const STR_PORTS: [u16; 2] = [8888, 17008];
+
+/// A shared deadline and cancellation flag for an initial read-only connection.
+#[derive(Clone, Debug)]
+pub struct ConnectionAttempt {
+    deadline: Instant,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl ConnectionAttempt {
+    pub fn new(deadline: Instant) -> Self {
+        Self {
+            deadline,
+            cancelled: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Release);
+    }
+
+    pub(crate) fn remaining(&self) -> Result<Duration> {
+        if self.cancelled.load(Ordering::Acquire) {
+            return Err(Error::ConnectionCancelled);
+        }
+        let remaining = self.deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            Err(Error::ConnectionTimeout)
+        } else {
+            Ok(remaining)
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Method {
@@ -39,6 +75,7 @@ pub(crate) trait Transport: Send + Sync {
 pub(crate) struct HttpTransport {
     read: ureq::Agent,
     write: ureq::Agent,
+    attempt: Option<ConnectionAttempt>,
 }
 
 impl Default for HttpTransport {
@@ -57,6 +94,16 @@ impl Default for HttpTransport {
         Self {
             read: agent(4),
             write: agent(45),
+            attempt: None,
+        }
+    }
+}
+
+impl HttpTransport {
+    pub(crate) fn for_connection(attempt: ConnectionAttempt) -> Self {
+        Self {
+            attempt: Some(attempt),
+            ..Self::default()
         }
     }
 }
@@ -74,7 +121,17 @@ impl Transport for HttpTransport {
         let operation = format!("{} {port}{path}", method.label());
         let write = !matches!(method, Method::Get);
         let mut response = match method {
-            Method::Get => self.read.get(&url).call(),
+            Method::Get => {
+                let request = self.read.get(&url);
+                match &self.attempt {
+                    Some(attempt) => request
+                        .config()
+                        .timeout_global(Some(attempt.remaining()?.min(Duration::from_secs(4))))
+                        .build()
+                        .call(),
+                    None => request.call(),
+                }
+            }
             Method::Put => self
                 .write
                 .put(&url)

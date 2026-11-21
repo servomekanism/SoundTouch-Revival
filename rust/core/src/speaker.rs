@@ -8,7 +8,8 @@ use crate::backup::recovery_backup;
 use crate::model::{check_slot, hardware_matches, parse_agent, parse_hardware, parse_info};
 use crate::transport::{BOSE_PORT, HttpTransport, Method, STR_PORTS, Transport};
 use crate::{
-    Agent, Error, HardwarePreset, Host, Preset, Presets, Report, Result, SLOTS, SpeakerInfo,
+    Agent, ConnectionAttempt, Error, HardwarePreset, Host, Preset, Presets, Report, Result, SLOTS,
+    SpeakerInfo,
 };
 
 const VERSION: &str = "/api/agent/version";
@@ -105,7 +106,29 @@ impl Snapshot {
 
 impl Speaker {
     pub fn connect(host: Host) -> Result<Self> {
-        let transport: Arc<dyn Transport> = Arc::new(HttpTransport::default());
+        Self::connect_with_transport(host, Arc::new(HttpTransport::default()))
+    }
+
+    /// Load the initial preset snapshot under a single deadline.
+    pub fn load(
+        host: Host,
+        attempt: &ConnectionAttempt,
+    ) -> Result<(Self, Option<SpeakerInfo>, Snapshot)> {
+        attempt.remaining()?;
+        let transport = Arc::new(HttpTransport::for_connection(attempt.clone()));
+        let result = (|| {
+            let mut speaker = Self::connect_with_transport(host, transport)?;
+            let info = speaker.info().ok();
+            let snapshot = speaker.snapshot()?;
+            // The deadline is for the initial load only.
+            speaker.transport = Arc::new(HttpTransport::default());
+            Ok((speaker, info, snapshot))
+        })();
+        attempt.remaining()?;
+        result
+    }
+
+    fn connect_with_transport(host: Host, transport: Arc<dyn Transport>) -> Result<Self> {
         let (agent, errors) = probe_agent(transport.as_ref(), host);
         match agent {
             Some(agent) => Ok(Self {
@@ -514,6 +537,25 @@ mod tests {
             None,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn initial_load_rejects_a_cancelled_or_expired_attempt() {
+        use std::time::{Duration, Instant};
+
+        let host = "192.168.1.50".parse().unwrap();
+        let cancelled = ConnectionAttempt::new(Instant::now() + Duration::from_secs(10));
+        cancelled.clone().cancel();
+        assert!(matches!(
+            Speaker::load(host, &cancelled),
+            Err(Error::ConnectionCancelled)
+        ));
+
+        let expired = ConnectionAttempt::new(Instant::now());
+        assert!(matches!(
+            Speaker::load(host, &expired),
+            Err(Error::ConnectionTimeout)
+        ));
     }
 
     #[test]

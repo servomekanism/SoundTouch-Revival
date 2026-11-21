@@ -13,6 +13,7 @@ pub use model::{
     validate_name, validate_url,
 };
 pub use speaker::{ApplyMode, ApplyOutcome, Change, Snapshot, Speaker, diagnose};
+pub use transport::ConnectionAttempt;
 
 use std::path::PathBuf;
 
@@ -36,6 +37,10 @@ pub enum Error {
     AgentUnavailable(String),
     #[error("could not identify the speaker ({0})")]
     SpeakerUnavailable(String),
+    #[error("Connection timed out")]
+    ConnectionTimeout,
+    #[error("Connection cancelled")]
+    ConnectionCancelled,
     #[error("preset read-back differs in slots {0}")]
     Readback(String),
     #[error("STR saved the changes, but Bose key registration differs in slots {0}")]

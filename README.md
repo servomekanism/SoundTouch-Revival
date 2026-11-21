@@ -9,13 +9,13 @@ Configure the six physical internet radio presets on a Bose SoundTouch 20. The s
 
 ## Desktop app
 
-Run from the repository root with Rust installed.
+Run the optimized desktop build from the repository root with Rust installed.
 
 ```bash
-cargo run --manifest-path rust/Cargo.toml -p soundtouch-radio-desktop --locked
+cargo run --manifest-path rust/Cargo.toml -p soundtouch-radio-desktop --release --locked
 ```
 
-Enter your speaker IP and click **Connect & load presets**. Open any of the six rows to edit it, then review and confirm with **Apply changes**. Use **Backup & restore** to save a copy or load a previous setup. [Desktop instructions](rust/README.md#edit-the-buttons)
+Enter your speaker IP and click **Connect & load presets**. Typing the address is local, and **Search LAN** starts discovery. Open any of the six rows to edit it, then review and confirm with **Apply changes**. Use **Backup & restore** to save a copy or load a previous setup. [Desktop instructions](rust/README.md#edit-the-buttons)
 
 ## Manage presets
 

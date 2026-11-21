@@ -6,14 +6,15 @@
 mod editor;
 
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use iced::widget::{
     button, column, container, opaque, pick_list, row, scrollable, space, stack, text, text_input,
 };
 use iced::{Alignment, Color, Element, Fill, Length, Task, Theme};
 use soundtouch_radio_core::{
-    ApplyMode, ApplyOutcome, Change, Codec, Error, Host, Presets, Result, SLOTS, Snapshot, Speaker,
-    discover, load_backup, save_backup,
+    ApplyMode, ApplyOutcome, Change, Codec, ConnectionAttempt, Error, Host, Presets, Result, SLOTS,
+    Snapshot, Speaker, discover, load_backup, save_backup,
 };
 
 use editor::{Drafts, Edit};
@@ -25,6 +26,7 @@ const MUTED: Color = Color::from_rgb(0.67, 0.72, 0.71);
 const GREEN: Color = Color::from_rgb(0.42, 0.85, 0.57);
 const ERROR: Color = Color::from_rgb(1.0, 0.60, 0.56);
 const AMBER: Color = Color::from_rgb(0.96, 0.79, 0.44);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 fn main() -> iced::Result {
     iced::application(App::default, App::update, App::view)
@@ -58,9 +60,8 @@ struct Loaded {
 }
 
 impl Loaded {
-    fn connect(ip: &str) -> Result<Self> {
-        let speaker = Speaker::connect(ip.parse::<Host>()?)?;
-        let info = speaker.info().ok();
+    fn connect(host: Host, attempt: &ConnectionAttempt) -> Result<Self> {
+        let (speaker, info, snapshot) = Speaker::load(host, attempt)?;
         let model = info
             .as_ref()
             .map(|info| info.model.as_str())
@@ -70,7 +71,6 @@ impl Loaded {
             .and_then(|info| info.friendly_name.as_deref())
             .or(speaker.agent().friendly_name.as_deref());
         let label = name.map_or_else(|| model.to_owned(), |name| format!("{name} · {model}"));
-        let snapshot = speaker.snapshot()?;
         Ok(Self {
             speaker,
             label,
@@ -87,10 +87,25 @@ struct App {
     expanded: Option<u8>,
     discovered: Vec<String>,
     busy: Option<&'static str>,
+    connection: Option<Connecting>,
+    connection_id: u64,
+    connection_notice: Notice,
     notice: Notice,
     dialog: Option<Dialog>,
     backup_menu: bool,
     reload_required: bool,
+}
+
+struct Connecting {
+    attempt: ConnectionAttempt,
+    task: iced::task::Handle,
+}
+
+impl Drop for Connecting {
+    fn drop(&mut self) {
+        self.attempt.cancel();
+        self.task.abort();
+    }
 }
 
 #[derive(Default)]
@@ -111,7 +126,7 @@ enum Dialog {
 }
 
 enum AfterDiscard {
-    Reload(String),
+    Reload(Host),
     Reset,
 }
 
@@ -120,7 +135,8 @@ enum Message {
     Ip(String),
     Connect,
     ConnectTo(String),
-    Connected(std::result::Result<Box<Loaded>, String>),
+    Connected(u64, std::result::Result<Box<Loaded>, String>),
+    CancelConnection,
     Discover,
     Discovered(Vec<String>, Option<String>),
     Expand(u8),
@@ -146,11 +162,16 @@ enum Message {
 impl App {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Ip(ip) => self.ip = ip,
+            Message::Ip(ip) => {
+                self.ip = ip;
+                self.connection_notice = Notice::None;
+            }
             Message::Connect => return self.request_connect(self.ip.clone()),
             Message::ConnectTo(ip) => return self.request_connect(ip),
-            Message::Connected(result) => {
-                self.busy = None;
+            Message::Connected(id, result) => {
+                if id != self.connection_id || self.connection.take().is_none() {
+                    return Task::none();
+                }
                 match result {
                     Ok(loaded) => {
                         self.install_snapshot(&loaded.snapshot);
@@ -161,14 +182,17 @@ impl App {
                         self.loaded = Some(*loaded);
                     }
                     Err(error) => {
-                        self.loaded = None;
-                        self.reload_required = false;
-                        self.notice = Notice::Error(error);
+                        self.connection_notice = Notice::Error(error);
                     }
                 }
             }
+            Message::CancelConnection => {
+                if self.connection.take().is_some() {
+                    self.connection_notice = Notice::Info("Connection cancelled.".into());
+                }
+            }
             Message::Discover => {
-                if self.busy.is_some() {
+                if self.is_busy() {
                     return Task::none();
                 }
                 self.busy = Some("Searching the local network…");
@@ -292,7 +316,9 @@ impl App {
             Message::Accept => {
                 if let Some(dialog) = self.dialog.take() {
                     match dialog {
-                        Dialog::Discard(AfterDiscard::Reload(ip)) => return self.begin_connect(ip),
+                        Dialog::Discard(AfterDiscard::Reload(host)) => {
+                            return self.begin_connect(host);
+                        }
                         Dialog::Discard(AfterDiscard::Reset) => {
                             self.drafts.discard();
                             self.expanded = None;
@@ -367,29 +393,66 @@ impl App {
     }
 
     fn request_connect(&mut self, ip: String) -> Task<Message> {
-        if self.busy.is_some() || self.dialog.is_some() {
+        if self.is_busy() || self.dialog.is_some() {
             return Task::none();
         }
+        let host = match ip.parse::<Host>() {
+            Ok(host) => host,
+            Err(error) => {
+                self.connection_notice = Notice::Error(error.to_string());
+                return Task::none();
+            }
+        };
         if self.drafts.dirty() {
-            self.dialog = Some(Dialog::Discard(AfterDiscard::Reload(ip)));
+            self.dialog = Some(Dialog::Discard(AfterDiscard::Reload(host)));
             Task::none()
         } else {
-            self.begin_connect(ip)
+            self.begin_connect(host)
         }
     }
 
-    fn begin_connect(&mut self, ip: String) -> Task<Message> {
-        self.ip = ip.trim().into();
-        self.loaded = None;
-        self.drafts = Drafts::default();
+    fn begin_connect(&mut self, host: Host) -> Task<Message> {
+        self.ip = host.to_string();
+        self.drafts.discard();
         self.expanded = None;
         self.backup_menu = false;
         self.notice = Notice::None;
-        self.busy = Some("Connecting and loading the six presets…");
-        work(
-            move || Loaded::connect(&ip).map(Box::new),
-            Message::Connected,
+        self.connection_notice = Notice::None;
+
+        let deadline = Instant::now() + CONNECT_TIMEOUT;
+        let attempt = ConnectionAttempt::new(deadline);
+        let worker_attempt = attempt.clone();
+        self.connection_id += 1;
+        let id = self.connection_id;
+        let (task, handle) = Task::perform(
+            async move {
+                let worker = tokio::task::spawn_blocking(move || {
+                    Loaded::connect(host, &worker_attempt).map(Box::new)
+                });
+                let result = tokio::time::timeout_at(deadline.into(), worker).await;
+                match result {
+                    Ok(Ok(result)) => result,
+                    Ok(Err(_)) => Err(Error::Response(
+                        "The connection stopped unexpectedly.".into(),
+                    )),
+                    Err(_) => Err(Error::ConnectionTimeout),
+                }
+                .map_err(|error| match error {
+                    Error::ConnectionTimeout => format!(
+                        "Connection timed out after {} seconds.",
+                        CONNECT_TIMEOUT.as_secs()
+                    ),
+                    _ => error.to_string(),
+                })
+            },
+            move |result| Message::Connected(id, result),
         )
+        .abortable();
+        self.connection = Some(Connecting {
+            attempt,
+            task: handle,
+        });
+        task
     }
 
     fn review(&mut self, desired: Presets, mode: ApplyMode) {
@@ -415,15 +478,16 @@ impl App {
             .is_some_and(|loaded| self.ip.parse::<Host>().ok() == Some(loaded.speaker.host()))
     }
 
+    fn is_busy(&self) -> bool {
+        self.busy.is_some() || self.connection.is_some()
+    }
+
     fn ready(&self) -> bool {
-        self.busy.is_none()
-            && self.dialog.is_none()
-            && !self.reload_required
-            && self.target_matches()
+        !self.is_busy() && self.dialog.is_none() && !self.reload_required && self.target_matches()
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let enabled = self.busy.is_none() && self.dialog.is_none();
+        let enabled = !self.is_busy() && self.dialog.is_none();
         let ready = self.ready();
         let errors = self
             .loaded
@@ -471,7 +535,36 @@ impl App {
                     .padding([4, 8]),
             );
         }
-        let mut content = column![header, target, search].spacing(14);
+        let mut content = column![header, target].spacing(14);
+        if self.connection.is_some() {
+            content = content.push(
+                row![
+                    text(format!(
+                        "Connecting and loading presets. Up to {} seconds.",
+                        CONNECT_TIMEOUT.as_secs()
+                    ))
+                    .size(14)
+                    .color(MUTED)
+                    .width(Fill),
+                    button("Cancel connection")
+                        .style(button::secondary)
+                        .on_press(Message::CancelConnection),
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center),
+            );
+        } else {
+            match &self.connection_notice {
+                Notice::None => {}
+                Notice::Info(message) => {
+                    content = content.push(text(message).size(14).color(MUTED))
+                }
+                Notice::Error(message) => {
+                    content = content.push(text(message).size(14).color(ERROR))
+                }
+            }
+        }
+        content = content.push(search);
         for slot in SLOTS {
             let warning = mismatches
                 .contains(&slot)
@@ -521,20 +614,22 @@ impl App {
         content = content.push(actions);
         if let Some(busy) = self.busy {
             content = content.push(text(busy).size(14).color(MUTED));
-        } else if self.loaded.is_some() && !self.target_matches() {
-            content = content.push(
-                text("Connect to the entered address to edit its presets.")
-                    .size(14)
-                    .color(AMBER),
-            );
-        } else {
-            match &self.notice {
-                Notice::None => {}
-                Notice::Info(message) => {
-                    content = content.push(text(message).size(14).color(MUTED))
-                }
-                Notice::Error(message) => {
-                    content = content.push(text(message).size(14).color(ERROR))
+        } else if self.connection.is_none() {
+            if self.loaded.is_some() && !self.target_matches() {
+                content = content.push(
+                    text("Connect to the entered address to edit its presets.")
+                        .size(14)
+                        .color(AMBER),
+                );
+            } else {
+                match &self.notice {
+                    Notice::None => {}
+                    Notice::Info(message) => {
+                        content = content.push(text(message).size(14).color(MUTED))
+                    }
+                    Notice::Error(message) => {
+                        content = content.push(text(message).size(14).color(ERROR))
+                    }
                 }
             }
         }
@@ -549,6 +644,9 @@ impl App {
     }
 
     fn status(&self) -> Element<'_, Message> {
+        if self.connection.is_some() {
+            return text("Connecting…").size(14).color(MUTED).into();
+        }
         match &self.loaded {
             Some(loaded) if !self.reload_required => column![
                 container(text("Connected").size(14).color(GREEN))
@@ -795,4 +893,48 @@ fn work<T: Send + 'static>(
         },
         finished,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn malformed_address_keeps_drafts_and_starts_no_connection() {
+        let mut app = App::default();
+        app.drafts.name(1, "Unsaved station".into());
+        let _ = app.request_connect("999.168.8.196".into());
+        assert!(!app.is_busy());
+        assert!(app.dialog.is_none());
+        assert!(app.drafts.dirty());
+        assert!(matches!(&app.connection_notice, Notice::Error(error) if error.contains("IPv4")));
+    }
+
+    #[test]
+    fn cancellation_frees_the_controls_and_ignores_the_old_result_after_retry() {
+        let mut app = App::default();
+        let _ = app.request_connect("192.168.1.50".into());
+        let first = app.connection_id;
+        assert!(app.is_busy());
+
+        let _ = app.update(Message::CancelConnection);
+        assert!(!app.is_busy());
+        assert!(matches!(app.connection_notice, Notice::Info(_)));
+
+        let _ = app.request_connect("192.168.1.51".into());
+        let _ = app.update(Message::Connected(first, Err("Old result".into())));
+        assert!(app.is_busy());
+        assert_eq!(app.ip, "192.168.1.51");
+        assert!(matches!(app.connection_notice, Notice::None));
+
+        let current = app.connection_id;
+        let _ = app.update(Message::Connected(
+            current,
+            Err("Connection timed out after 10 seconds.".into()),
+        ));
+        assert!(!app.is_busy());
+        assert!(
+            matches!(&app.connection_notice, Notice::Error(error) if error.contains("10 seconds"))
+        );
+    }
 }

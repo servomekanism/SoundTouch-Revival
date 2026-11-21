@@ -12,16 +12,16 @@ From the repository root, build both applications with the checked-in lockfile.
 cargo build --manifest-path rust/Cargo.toml --workspace --release --locked
 ```
 
-The binaries are in `rust/target/release/`, with `.exe` extensions on Windows. You can also start the desktop app directly from source.
+The binaries are in `rust/target/release/`, with `.exe` extensions on Windows. You can also build and start the desktop app with one command. Use `--release` for responsive software rendering, especially in a VM.
 
 ```sh
-cargo run --manifest-path rust/Cargo.toml -p soundtouch-radio-desktop --locked
+cargo run --manifest-path rust/Cargo.toml -p soundtouch-radio-desktop --release --locked
 ```
 
 ## Edit the buttons
 
 1. Enter the speaker's IPv4 address or choose a result from **Search LAN**.
-2. Click **Connect & load presets**. The app checks the STR agent, reads the six saved assignments, and compares them with the Bose button registrations.
+2. Click **Connect & load presets**. The app checks the STR agent, reads the six saved assignments, and compares them with the Bose button registrations. The whole attempt has a 10-second limit. Click **Cancel connection** to stop waiting and retry immediately. Invalid LAN addresses get an immediate error.
 3. Open any numbered row to edit its name, direct stream URL, or codec. Use **Clear slot** to empty a button or **Undo** to reset that row. The app prompts before reloading or switching speakers while you have unsaved edits.
 4. Click **Apply changes**, review the affected buttons, then confirm. You can swap two stations by editing both rows before applying. The app saves a recovery copy in the local application data directory before writing and checks both the saved assignments and their button registrations afterward.
 5. Press each changed button on the speaker to confirm playback. The app checks URL syntax and passes the batch to STR for validation. The batch API checks the shape of the stream URL and skips the network probes that STR runs on individual saves. [STR v1.8.2 preset handlers](https://github.com/JRpersonal/streborn/blob/v1.8.2/internal/webui/presets_http.go)
