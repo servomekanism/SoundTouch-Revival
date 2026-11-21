@@ -1,0 +1,8 @@
+[package]
+name = "soundtouch-radio"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+soundtouch-radio-core.workspace = true

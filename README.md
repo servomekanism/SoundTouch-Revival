@@ -2,21 +2,26 @@
 
 Configure the six physical internet radio presets on a Bose SoundTouch 20 from Linux. The speaker runs STR and stores the presets on its own flash. The Linux CLI connects only while you use it. [STR architecture](https://github.com/JRpersonal/streborn/blob/v1.8.2/docs/ARCHITECTURE.md)
 
+## Implementations
+
+- [Python CLI](python/) is the working implementation and the fallback for Linux. The `python-v0.1.0` tag records the original root-level layout.
+- [Rust workspace](rust/) reserves crates for the shared speaker client, CLI, and Iced desktop app. Its target platforms are Windows x64, Linux x64, and Apple Silicon macOS. The workspace currently contains scaffolding.
+
 ## Manage presets
 
-Use Python 3.10 or newer. From this directory run `python3 soundtouch_radio.py`. To install the `soundtouch-radio` command, install the project in a Python virtual environment with `python -m pip install .`. The CLI has no runtime Python dependencies.
+Use Python 3.10 or newer. From this directory run `python3 python/soundtouch_radio.py`. To install the `soundtouch-radio` command, install the project in a Python virtual environment with `python -m pip install ./python`. The CLI has no runtime Python dependencies.
 
 Replace `192.168.1.50` with your speaker's IPv4 address.
 
 ```bash
-python3 soundtouch_radio.py discover
-python3 soundtouch_radio.py info --host 192.168.1.50
-python3 soundtouch_radio.py presets list --host 192.168.1.50
-python3 soundtouch_radio.py presets backup --host 192.168.1.50 --file presets.json
-python3 soundtouch_radio.py presets set --host 192.168.1.50 --slot 6 \
+python3 python/soundtouch_radio.py discover
+python3 python/soundtouch_radio.py info --host 192.168.1.50
+python3 python/soundtouch_radio.py presets list --host 192.168.1.50
+python3 python/soundtouch_radio.py presets backup --host 192.168.1.50 --file presets.json
+python3 python/soundtouch_radio.py presets set --host 192.168.1.50 --slot 6 \
     --name "ERA Kosmos" --codec MP3 --url "https://radiostreaming.ert.gr/ert-kosmos"
-python3 soundtouch_radio.py presets verify --host 192.168.1.50
-python3 soundtouch_radio.py presets restore --host 192.168.1.50 --file presets.json
+python3 python/soundtouch_radio.py presets verify --host 192.168.1.50
+python3 python/soundtouch_radio.py presets restore --host 192.168.1.50 --file presets.json
 ```
 
 `set` and `restore` prompt for confirmation. Use `--yes` only when you intend to apply the write. `set` reads back the station and checks the Bose hardware registration. `verify` compares all six registrations with the STR store. A passing registration check still needs an audible button test. `list --json` emits the full STR mappings, which can include private URLs and account metadata.
@@ -32,22 +37,22 @@ This setup assigns Trito Programma, Deftero Programma, ERA Kosmos, WRBF 104.9 Th
 Replace `192.168.1.50` with your speaker's IP. When switching from the [original six-station layout](docs/verification.md), run the commands one at a time in the order shown. This frees each moved station's old button before saving it to the new one. Confirm each prompt and wait for `Verified slot` before continuing.
 
 ```bash
-python3 soundtouch_radio.py presets set --host 192.168.1.50 \
+python3 python/soundtouch_radio.py presets set --host 192.168.1.50 \
     --slot 6 --name "Rebetiko Sealabs" --codec MP3 --url "https://rebetiko.sealabs.net/radio"
 
-python3 soundtouch_radio.py presets set --host 192.168.1.50 \
+python3 python/soundtouch_radio.py presets set --host 192.168.1.50 \
     --slot 3 --name "ERA Kosmos" --codec MP3 --url "https://radiostreaming.ert.gr/ert-kosmos"
 
-python3 soundtouch_radio.py presets set --host 192.168.1.50 \
+python3 python/soundtouch_radio.py presets set --host 192.168.1.50 \
     --slot 4 --name "Rebel" --codec AAC --url "https://ais-sa1.streamon.fm/7047_48k.aac"
 
-python3 soundtouch_radio.py presets set --host 192.168.1.50 \
+python3 python/soundtouch_radio.py presets set --host 192.168.1.50 \
     --slot 1 --name "Trito Programma" --codec MP3 --url "https://radiostreaming.ert.gr/ert-trito"
 
-python3 soundtouch_radio.py presets set --host 192.168.1.50 \
+python3 python/soundtouch_radio.py presets set --host 192.168.1.50 \
     --slot 2 --name "Deftero Programma" --codec MP3 --url "https://radiostreaming.ert.gr/ert-deftero"
 
-python3 soundtouch_radio.py presets set --host 192.168.1.50 \
+python3 python/soundtouch_radio.py presets set --host 192.168.1.50 \
     --slot 5 --name "Trito Maestro" --codec MP3 --url "https://radiostreaming.ert.gr/ert-trito-maestro"
 ```
 
@@ -56,7 +61,7 @@ python3 soundtouch_radio.py presets set --host 192.168.1.50 \
 Run these commands from this directory on a Linux computer connected to the speaker's home network. Use Python 3.10 or newer. Direct probing uses only the Python standard library.
 
 ```bash
-python3 soundtouch_probe.py --discover
+python3 python/soundtouch_probe.py --discover
 ```
 
 Discovery uses `avahi-browse` and a running `avahi-daemon` on the Linux computer. On Debian or Ubuntu, `sudo apt install avahi-utils` installs the browse utility. If discovery finds no advertisements or mDNS is blocked, use the IPv4 address from your router's connected-device list. [Bose IP address guide](https://support.bose.com/s/article/st20-speakerwireless-determining-the-ip-address---ka08c000001pxt9aam?language=en_US)
@@ -64,8 +69,8 @@ Discovery uses `avahi-browse` and a running `avahi-daemon` on the Linux computer
 Replace the example address with the speaker's private or link-local IPv4 address.
 
 ```bash
-python3 soundtouch_probe.py --host 192.168.1.50
-python3 soundtouch_probe.py --host 192.168.1.50 --json > soundtouch-diagnostic.json
+python3 python/soundtouch_probe.py --host 192.168.1.50
+python3 python/soundtouch_probe.py --host 192.168.1.50 --json > soundtouch-diagnostic.json
 ```
 
 The report shows the model, module type, variant, firmware and component versions when supplied, the Bose API's physical preset list, and the STR agent version if detected. The JSON omits the target address, friendly name, serial numbers, MAC addresses, account fields, and preset URLs. Review preset titles before sharing the file. It is a diagnostic summary and contains too little information to restore presets.
@@ -85,7 +90,7 @@ The probe uses direct HTTP sockets with a four-second socket timeout and caps ea
 ## Test
 
 ```bash
-python3 -B -m unittest discover -s tests -v
+(cd python && python3 -B -m unittest discover -s tests -v)
 ```
 
 The tests use mocked HTTP and mDNS responses. The [compatibility assessment](docs/compatibility.md) records the live diagnostic, upstream findings, and recovery options.

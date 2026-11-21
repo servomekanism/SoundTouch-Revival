@@ -3,3 +3,7 @@
 /presets.before-restore-*.json
 /soundtouch-diagnostic.json
 __pycache__/
+/python/presets.json
+/python/presets.before-restore-*.json
+/python/soundtouch-diagnostic.json
+/rust/target/
